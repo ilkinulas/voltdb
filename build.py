@@ -288,6 +288,7 @@ CTX.INPUT['executors'] = """
  abstractexecutor.cpp
  abstractjoinexecutor.cpp
  aggregateexecutor.cpp
+ commontableexecutor.cpp
  deleteexecutor.cpp
  executorfactory.cpp
  executorutil.cpp

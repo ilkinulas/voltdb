@@ -135,9 +135,19 @@ bool SeqScanExecutor::p_execute(const NValueArray &params) {
         return true;
     }
 
-    Table* input_table = (node->isSubqueryScan()) ?
-            node->getChildren()[0]->getOutputTable():
-            node->getTargetTable();
+    Table* input_table = NULL;
+    if (node->isCteScan()) {
+        ExecutorContext* ec = ExecutorContext::getExecutorContext();
+        input_table = ec->getCommonTable(node->getTargetTableName(),
+                                         node->getCteStmtId());
+    }
+    else if (node->isSubqueryScan()) {
+        input_table = node->getChildren()[0]->getOutputTable();
+    }
+    else {
+        assert (node->isPersistentTableScan());
+        input_table = node->getTargetTable();
+    }
 
     assert(input_table);
 

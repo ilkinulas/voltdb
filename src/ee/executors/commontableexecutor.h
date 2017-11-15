@@ -46,7 +46,14 @@
 #ifndef COMMONTABLEEXECUTOR_H
 #define COMMONTABLEEXECUTOR_H
 
+#include "common/valuevector.h"
+#include "executors/abstractexecutor.h"
+
 namespace voltdb {
+
+class AbstractPlanNode;
+class ExecutorVector;
+class VoltDBEngine;
 
 class CommonTableExecutor : public AbstractExecutor {
 public:
@@ -56,15 +63,11 @@ public:
     }
 
     virtual bool p_init(AbstractPlanNode*,
-                        const ExecutorVector& executorVector) {
-        return true;
-    }
+                        const ExecutorVector& executorVector);
 
-    virtual bool p_execute(const NValueArray& params) {
-        return true;
-    }
+    virtual bool p_execute(const NValueArray& params);
 };
 
-}
+} // end namespace voltdb
 
 #endif // COMMONTABLEEXECUTOR_H

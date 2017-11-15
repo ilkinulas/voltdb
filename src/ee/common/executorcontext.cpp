@@ -209,12 +209,6 @@ UniqueTempTableResult ExecutorContext::executeExecutors(const std::vector<Abstra
         throw;
     }
 
-    // Cleanup all but the temp table produced by the last executor.
-    // The last temp table is the result which the caller may care about.
-    for (int i = 0; i < executorList.size() - 1; ++i) {
-        executorList[i]->cleanupTempOutputTable();
-    }
-
     AbstractTempTable *result = executorList[ttl-1]->getPlanNode()->getTempOutputTable();
     return UniqueTempTableResult(result);
 }
@@ -225,6 +219,24 @@ Table* ExecutorContext::getSubqueryOutputTable(int subqueryId) const
     assert(!executorList.empty());
     return executorList.back()->getPlanNode()->getOutputTable();
 }
+
+AbstractTempTable* ExecutorContext::getCommonTable(const std::string& tableName,
+                                                   int cteStmtId) {
+    AbstractTempTable* table = NULL;
+    auto it = m_commonTableMap.find(tableName);
+    if (it == m_commonTableMap.end()) {
+        UniqueTempTableResult result = executeExecutors(cteStmtId);
+        table = result.release();
+        m_commonTableMap.insert(std::make_pair(tableName, table));
+    }
+    else {
+        table = it->second;
+    }
+
+    return table;
+}
+
+
 
 void ExecutorContext::cleanupAllExecutors()
 {
@@ -240,6 +252,7 @@ void ExecutorContext::cleanupAllExecutors()
 
     // Clear any cached results from executed subqueries
     m_subqueryContextMap.clear();
+    m_commonTableMap.clear();
 }
 
 void ExecutorContext::cleanupExecutorsForSubquery(const std::vector<AbstractExecutor*>& executorList) const {

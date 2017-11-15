@@ -21,11 +21,19 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#include <string>
+#include <vector>
+
+#include <boost/optional.hpp>
+
 #include "harness.h"
 
+#include "test_utils/Tools.hpp"
 #include "test_utils/UniqueEngine.hpp"
 
 #include "execution/ExecutorVector.h"
+#include "storage/table.h"
+#include "common/tabletuple.h"
 
 using namespace voltdb;
 
@@ -231,8 +239,7 @@ const std::string jsonPlan =
     "{\n"
     "    \"EXECUTE_LISTS\": [\n"
     "        {\"EXECUTE_LIST\": [\n"
-    "            2,\n"
-    "            1\n"
+    "            2\n"
     "        ]},\n"
     "        {\"EXECUTE_LIST\": [\n"
     "            5,\n"
@@ -249,11 +256,6 @@ const std::string jsonPlan =
     "    \"PLAN_NODES_LISTS\": [\n"
     "        {\n"
     "            \"PLAN_NODES\": [\n"
-    "                {\n"
-    "                    \"CHILDREN_IDS\": [2],\n"
-    "                    \"ID\": 1,\n"
-    "                    \"PLAN_NODE_TYPE\": \"SEND\"\n"
-    "                },\n"
     "                {\n"
     "                    \"ID\": 2,\n"
     "                    \"INLINE_NODES\": [{\n"
@@ -307,7 +309,8 @@ const std::string jsonPlan =
     "                    \"PLAN_NODE_TYPE\": \"SEQSCAN\",\n"
     "                    \"TARGET_TABLE_ALIAS\": \"EMP_PATH\",\n"
     "                    \"TARGET_TABLE_NAME\": \"EMP_PATH\",\n"
-    "                    \"IS_CTE_SCAN\": true\n"
+    "                    \"IS_CTE_SCAN\": true,\n"
+    "                    \"CTE_STMT_ID\": 1\n"
     "                }\n"
     "            ],\n"
     "            \"STATEMENT_ID\": 0\n"
@@ -627,7 +630,8 @@ const std::string jsonPlan =
     "                    \"PLAN_NODE_TYPE\": \"SEQSCAN\",\n"
     "                    \"TARGET_TABLE_ALIAS\": \"EP\",\n"
     "                    \"TARGET_TABLE_NAME\": \"EMP_PATH\","
-    "                    \"IS_CTE_SCAN\": true\n"
+    "                    \"IS_CTE_SCAN\": true,\n"
+    "                    \"CTE_STMT_ID\": 1\n"
     "                }\n"
     "            ],\n"
     "            \"STATEMENT_ID\": 2\n"
@@ -635,13 +639,70 @@ const std::string jsonPlan =
     "    ]\n"
     "}\n";
 
+namespace {
+
+    void loadEmployees(Table* employeesTable) {
+    assert(employeesTable != NULL);
+
+    std::vector<std::string> names{
+        "King",       "Cambrault",      "Bates",
+        "Bloom",      "Fox",            "Kumar",
+        "Ozer",       "Smith",          "De Haan",
+        "Hunold",     "Austin",         "Ernst",
+        "Lorentz",    "Pataballa",      "Errazuriz",
+        "Ande",       "Banda"
+    };
+
+    std::vector<int> empIds{
+        100, 148, 172,
+        169, 170, 173,
+        168, 171, 102,
+        103, 105, 104,
+        107, 106, 147,
+        166, 167
+    };
+
+    // Use optional to represent null values;
+    // first employee has no manager---he's the boss.
+    std::vector<boost::optional<int>> managerIds = {
+        boost::none,   100, 148,
+        148,           148, 148,
+        148,           148, 100,
+        102,           103, 103,
+        103,           103, 100,
+        147,           147
+    };
+
+    assert(names.size() == empIds.size());
+    assert(names.size() == managerIds.size());
+
+    PoolBackedTupleStorage storage;
+    storage.init(employeesTable->schema(), ExecutorContext::getTempStringPool());
+    storage.allocateActiveTuple();
+    TableTuple tuple{storage};
+    for (int i = 0; i < names.size(); ++i) {
+        Tools::setTupleValues(&tuple, names[i], empIds[i], managerIds[i]);
+        employeesTable->insertTuple(tuple);
+    }
+}
+
+}
+
 TEST_F(CommonTableExpressionTest, Basic) {
     UniqueEngine engine = UniqueEngineBuilder().build();
     bool success = engine->loadCatalog(0, catalogPayload);
     ASSERT_TRUE(success);
 
+    Table* employeesTable = engine->getTableByName("EMPLOYEES");
+    loadEmployees(employeesTable);
+
+    std::cout << employeesTable->debug() << std::endl;
+
     auto ev = ExecutorVector::fromJsonPlan(engine.get(), jsonPlan, 0);
     ASSERT_NE(NULL, ev.get());
+
+    UniqueTempTableResult result = engine->executePlanFragment(ev.get(), NULL);
+    ASSERT_NE(NULL, result.get());
 }
 
 int main() {
