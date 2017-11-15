@@ -32,6 +32,7 @@
 #include "test_utils/UniqueEngine.hpp"
 
 #include "execution/ExecutorVector.h"
+#include "storage/AbstractTempTable.hpp"
 #include "storage/table.h"
 #include "common/tabletuple.h"
 
@@ -254,6 +255,7 @@ const std::string jsonPlan =
     "    ],\n"
     "    \"IS_LARGE_QUERY\": false,\n"
     "    \"PLAN_NODES_LISTS\": [\n"
+    // The outermost query that references the output of the WITH clause
     "        {\n"
     "            \"PLAN_NODES\": [\n"
     "                {\n"
@@ -291,7 +293,7 @@ const std::string jsonPlan =
     "                                \"EXPRESSION\": {\n"
     "                                    \"COLUMN_IDX\": 3,\n"
     "                                    \"TYPE\": 32,\n"
-    "                                    \"VALUE_TYPE\": 5\n"
+    "                                    \"VALUE_TYPE\": 6\n"
     "                                }\n"
     "                            },\n"
     "                            {\n"
@@ -315,12 +317,14 @@ const std::string jsonPlan =
     "            ],\n"
     "            \"STATEMENT_ID\": 0\n"
     "        },\n"
+    // The base query of the CTE (with common table node at the root)
     "        {\n"
     "            \"PLAN_NODES\": [\n"
     "                {\n"
     "                    \"CHILDREN_IDS\": [5],\n"
     "                    \"ID\": 4,\n"
     "                    \"PLAN_NODE_TYPE\": \"COMMONTABLE\",\n"
+    "                    \"COMMON_TABLE_NAME\": \"EMP_PATH\",\n"
     "                    \"RECURSIVE_STATEMENT_ID\": 2\n"
     "                },\n"
     "                {\n"
@@ -356,9 +360,10 @@ const std::string jsonPlan =
     "                            {\n"
     "                                \"COLUMN_NAME\": \"C4\",\n"
     "                                \"EXPRESSION\": {\n"
-    "                                    \"PARAM_IDX\": 0,\n"
-    "                                    \"TYPE\": 31,\n"
-    "                                    \"VALUE_TYPE\": 5\n"
+    "                                    \"ISNULL\": false,\n"
+    "                                    \"VALUE\": \"1\",\n"
+    "                                    \"TYPE\": 30,\n"
+    "                                    \"VALUE_TYPE\": 6\n"
     "                                }\n"
     "                            },\n"
     "                            {\n"
@@ -389,6 +394,7 @@ const std::string jsonPlan =
     "            ],\n"
     "            \"STATEMENT_ID\": 1\n"
     "        },\n"
+    // The recursive query of the CTE
     "        {\n"
     "            \"PLAN_NODES\": [\n"
     "                {\n"
@@ -429,8 +435,9 @@ const std::string jsonPlan =
     "                                    \"VALUE_TYPE\": 5\n"
     "                                },\n"
     "                                \"RIGHT\": {\n"
-    "                                    \"PARAM_IDX\": 0,\n"
-    "                                    \"TYPE\": 31,\n"
+    "                                    \"ISNULL\": false,\n"
+    "                                    \"VALUE\": \"1\",\n"
+    "                                    \"TYPE\": 30,\n"
     "                                    \"VALUE_TYPE\": 5\n"
     "                                },\n"
     "                                \"TYPE\": 1,\n"
@@ -450,9 +457,9 @@ const std::string jsonPlan =
     "                                                \"VALUE_TYPE\": 9\n"
     "                                            },\n"
     "                                            {\n"
-    "                                                \"PARAM_IDX\": 1,\n"
-    "                                                \"TYPE\": 31,\n"
-    "                                                \"VALUE_SIZE\": 1048576,\n"
+    "                                                \"ISNULL\": false,\n"
+    "                                                \"VALUE\": \"/\",\n"
+    "                                                \"TYPE\": 30,\n"
     "                                                \"VALUE_TYPE\": 9\n"
     "                                            }\n"
     "                                        ],\n"
@@ -676,10 +683,8 @@ namespace {
     assert(names.size() == empIds.size());
     assert(names.size() == managerIds.size());
 
-    PoolBackedTupleStorage storage;
-    storage.init(employeesTable->schema(), ExecutorContext::getTempStringPool());
-    storage.allocateActiveTuple();
-    TableTuple tuple{storage};
+    StandAloneTupleStorage storage{employeesTable->schema()};
+    TableTuple tuple = storage.tuple();
     for (int i = 0; i < names.size(); ++i) {
         Tools::setTupleValues(&tuple, names[i], empIds[i], managerIds[i]);
         employeesTable->insertTuple(tuple);
@@ -696,13 +701,13 @@ TEST_F(CommonTableExpressionTest, Basic) {
     Table* employeesTable = engine->getTableByName("EMPLOYEES");
     loadEmployees(employeesTable);
 
-    std::cout << employeesTable->debug() << std::endl;
-
     auto ev = ExecutorVector::fromJsonPlan(engine.get(), jsonPlan, 0);
     ASSERT_NE(NULL, ev.get());
 
     UniqueTempTableResult result = engine->executePlanFragment(ev.get(), NULL);
     ASSERT_NE(NULL, result.get());
+
+    std::cout << "\n\n\nRESULT:\n" << result->debug() << std::endl;
 }
 
 int main() {

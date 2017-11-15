@@ -16,6 +16,7 @@
  */
 
 #include "executors/commontableexecutor.h"
+#include "plannodes/commontablenode.h"
 #include "storage/tableiterator.h"
 
 namespace voltdb {
@@ -27,14 +28,48 @@ bool CommonTableExecutor::p_init(AbstractPlanNode*,
 }
 
 bool CommonTableExecutor::p_execute(const NValueArray& params) {
+    ExecutorContext *ec = ExecutorContext::getExecutorContext();
+    CommonTablePlanNode* node = static_cast<CommonTablePlanNode*>(m_abstractNode);
     AbstractTempTable* inputTable = m_abstractNode->getTempInputTable();
-    AbstractTempTable* outputTable = m_abstractNode->getTempInputTable();
+    AbstractTempTable* finalOutputTable = m_abstractNode->getTempOutputTable();
+
+#ifndef NDEBUG
+    assert(inputTable->schema()->isCompatibleForMemcpy(finalOutputTable->schema()));
+#endif
 
     TableTuple iterTuple(inputTable->schema());
     TableIterator iter = inputTable->iterator();
     while (iter.next(iterTuple)) {
-        outputTable->insertTuple(iterTuple);
+        finalOutputTable->insertTuple(iterTuple);
     }
+
+    ec->setCommonTable(node->getCommonTableName(), inputTable);
+    int recursiveStmtId = node->getRecursiveStmtId();
+    while (inputTable->activeTupleCount() > 0) {
+        // At head of this loop,
+        // inputTable should refer to what should be
+        // the input the the recursive query.
+
+        AbstractTempTable* recursiveOutputTable = ec->executeExecutors(recursiveStmtId).release();
+
+        // Add the recursive output to the final result
+        iter = recursiveOutputTable->iterator();
+        while (iter.next(iterTuple)) {
+            finalOutputTable->insertTuple(iterTuple);
+        }
+
+        // Now prepare for the next iteration...
+        inputTable->deleteAllTempTuples();
+        inputTable->swapContents(recursiveOutputTable);
+        assert(recursiveOutputTable->activeTupleCount() == 0);
+
+        std::swap(inputTable, recursiveOutputTable);
+
+
+        ec->setCommonTable(node->getCommonTableName(), inputTable);
+    }
+
+    ec->setCommonTable(node->getCommonTableName(), finalOutputTable);
 
     return true;
 }

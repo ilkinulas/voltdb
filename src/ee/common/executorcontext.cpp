@@ -147,7 +147,6 @@ UniqueTempTableResult ExecutorContext::executeExecutors(const std::vector<Abstra
     // The query planner guarantees that for a given plannode,
     // all of its children are positioned before it in this list,
     // therefore dependency tracking is not needed here.
-    size_t ttl = executorList.size();
     int ctr = 0;
 
     try {
@@ -209,7 +208,7 @@ UniqueTempTableResult ExecutorContext::executeExecutors(const std::vector<Abstra
         throw;
     }
 
-    AbstractTempTable *result = executorList[ttl-1]->getPlanNode()->getTempOutputTable();
+    AbstractTempTable *result = executorList.back()->getPlanNode()->getTempOutputTable();
     return UniqueTempTableResult(result);
 }
 
@@ -235,8 +234,6 @@ AbstractTempTable* ExecutorContext::getCommonTable(const std::string& tableName,
 
     return table;
 }
-
-
 
 void ExecutorContext::cleanupAllExecutors()
 {

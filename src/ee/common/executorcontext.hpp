@@ -387,6 +387,11 @@ class ExecutorContext {
     AbstractTempTable* getCommonTable(const std::string& tableName,
                                       int cteStmtId);
 
+    void setCommonTable(const std::string& tableName,
+                        AbstractTempTable* table) {
+        m_commonTableMap[tableName] = table;
+    }
+
     /**
      * Call into the topend with information about how executing a plan fragment is going.
      */
