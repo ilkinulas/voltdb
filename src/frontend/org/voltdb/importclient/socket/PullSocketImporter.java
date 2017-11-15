@@ -102,7 +102,10 @@ public class PullSocketImporter extends AbstractImporter {
     }
 
     private void susceptibleRun() {
-        if (m_eos.get()) return;
+        if (m_eos.get()) {
+            info(null, "Not Starting socket puller for as closed." + m_config.getResourceID());
+            return;
+        }
 
         info(null, "Starting socket puller for " + m_config.getResourceID());
 
@@ -113,7 +116,7 @@ public class PullSocketImporter extends AbstractImporter {
             try {
                 reader = attemptBufferedReader();
                 if (!reader.isPresent()) {
-                    sleep(2_000);
+                    sleep(1_000);
                     continue;
                 }
                 info(null, "Socket puller for " + m_config.getResourceID() + " connected.");
