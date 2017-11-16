@@ -138,6 +138,8 @@ public class PullSocketImporter extends AbstractImporter {
                 }
                 if (csv == null) {
                     warn(null, m_config.getResourceID() + " peer terminated stream");
+                    sleep(5_000);
+                    if (m_eos.get()) break;
                 }
             } catch (EOFException e) {
                 rateLimitedLog(Level.WARN, e, m_config.getResourceID() + " peer terminated stream");
