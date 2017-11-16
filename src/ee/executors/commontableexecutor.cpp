@@ -61,12 +61,10 @@ bool CommonTableExecutor::p_execute(const NValueArray& params) {
         // Now prepare for the next iteration...
         inputTable->deleteAllTempTuples();
         inputTable->swapContents(recursiveOutputTable);
+
+        // inputTable now has recursive output
+        // recursiveOutputTable is now empty
         assert(recursiveOutputTable->activeTupleCount() == 0);
-
-        std::swap(inputTable, recursiveOutputTable);
-
-
-        ec->setCommonTable(node->getCommonTableName(), inputTable);
     }
 
     ec->setCommonTable(node->getCommonTableName(), finalOutputTable);

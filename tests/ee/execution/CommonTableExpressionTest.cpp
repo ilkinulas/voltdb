@@ -22,23 +22,27 @@
  */
 
 #include <string>
+#include <tuple>
 #include <vector>
 
+#include <boost/foreach.hpp>
 #include <boost/optional.hpp>
 
 #include "harness.h"
 
 #include "test_utils/Tools.hpp"
+#include "test_utils/TupleComparingTest.hpp"
 #include "test_utils/UniqueEngine.hpp"
 
+#include "common/tabletuple.h"
 #include "execution/ExecutorVector.h"
 #include "storage/AbstractTempTable.hpp"
 #include "storage/table.h"
-#include "common/tabletuple.h"
+#include "storage/tableiterator.h"
 
 using namespace voltdb;
 
-class CommonTableExpressionTest : public Test {
+class CommonTableExpressionTest : public TupleComparingTest {
 };
 
 // Catalog for the following DDL:
@@ -91,74 +95,6 @@ const std::string catalogPayload =
     "set $PREV sql true\n"
     "set $PREV sqlread true\n"
     "set $PREV allproc true\n"
-    "add /clusters#cluster/databases#database tables DERIVED_EMP_PATH\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH isreplicated true\n"
-    "set $PREV partitioncolumn null\n"
-    "set $PREV estimatedtuplecount 0\n"
-    "set $PREV materializer null\n"
-    "set $PREV signature \"DERIVED_EMP_PATH|viiiv\"\n"
-    "set $PREV tuplelimit 2147483647\n"
-    "set $PREV isDRed false\n"
-    "add /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH columns EMP_ID\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH/columns#EMP_ID index 1\n"
-    "set $PREV type 5\n"
-    "set $PREV size 4\n"
-    "set $PREV nullable false\n"
-    "set $PREV name \"EMP_ID\"\n"
-    "set $PREV defaultvalue null\n"
-    "set $PREV defaulttype 0\n"
-    "set $PREV aggregatetype 0\n"
-    "set $PREV matviewsource null\n"
-    "set $PREV matview null\n"
-    "set $PREV inbytes false\n"
-    "add /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH columns LAST_NAME\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH/columns#LAST_NAME index 0\n"
-    "set $PREV type 9\n"
-    "set $PREV size 20\n"
-    "set $PREV nullable false\n"
-    "set $PREV name \"LAST_NAME\"\n"
-    "set $PREV defaultvalue null\n"
-    "set $PREV defaulttype 0\n"
-    "set $PREV aggregatetype 0\n"
-    "set $PREV matviewsource null\n"
-    "set $PREV matview null\n"
-    "set $PREV inbytes false\n"
-    "add /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH columns LEVEL\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH/columns#LEVEL index 3\n"
-    "set $PREV type 5\n"
-    "set $PREV size 4\n"
-    "set $PREV nullable false\n"
-    "set $PREV name \"LEVEL\"\n"
-    "set $PREV defaultvalue null\n"
-    "set $PREV defaulttype 0\n"
-    "set $PREV aggregatetype 0\n"
-    "set $PREV matviewsource null\n"
-    "set $PREV matview null\n"
-    "set $PREV inbytes false\n"
-    "add /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH columns MANAGER_ID\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH/columns#MANAGER_ID index 2\n"
-    "set $PREV type 5\n"
-    "set $PREV size 4\n"
-    "set $PREV nullable false\n"
-    "set $PREV name \"MANAGER_ID\"\n"
-    "set $PREV defaultvalue null\n"
-    "set $PREV defaulttype 0\n"
-    "set $PREV aggregatetype 0\n"
-    "set $PREV matviewsource null\n"
-    "set $PREV matview null\n"
-    "set $PREV inbytes false\n"
-    "add /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH columns PATH\n"
-    "set /clusters#cluster/databases#database/tables#DERIVED_EMP_PATH/columns#PATH index 4\n"
-    "set $PREV type 9\n"
-    "set $PREV size 10000\n"
-    "set $PREV nullable false\n"
-    "set $PREV name \"PATH\"\n"
-    "set $PREV defaultvalue null\n"
-    "set $PREV defaulttype 0\n"
-    "set $PREV aggregatetype 0\n"
-    "set $PREV matviewsource null\n"
-    "set $PREV matview null\n"
-    "set $PREV inbytes false\n"
     "add /clusters#cluster/databases#database tables EMPLOYEES\n"
     "set /clusters#cluster/databases#database/tables#EMPLOYEES isreplicated true\n"
     "set $PREV partitioncolumn null\n"
@@ -646,68 +582,95 @@ const std::string jsonPlan =
     "    ]\n"
     "}\n";
 
-namespace {
-
-    void loadEmployees(Table* employeesTable) {
-    assert(employeesTable != NULL);
-
-    std::vector<std::string> names{
-        "King",       "Cambrault",      "Bates",
-        "Bloom",      "Fox",            "Kumar",
-        "Ozer",       "Smith",          "De Haan",
-        "Hunold",     "Austin",         "Ernst",
-        "Lorentz",    "Pataballa",      "Errazuriz",
-        "Ande",       "Banda"
-    };
-
-    std::vector<int> empIds{
-        100, 148, 172,
-        169, 170, 173,
-        168, 171, 102,
-        103, 105, 104,
-        107, 106, 147,
-        166, 167
-    };
-
-    // Use optional to represent null values;
-    // first employee has no manager---he's the boss.
-    std::vector<boost::optional<int>> managerIds = {
-        boost::none,   100, 148,
-        148,           148, 148,
-        148,           148, 100,
-        102,           103, 103,
-        103,           103, 100,
-        147,           147
-    };
-
-    assert(names.size() == empIds.size());
-    assert(names.size() == managerIds.size());
-
-    StandAloneTupleStorage storage{employeesTable->schema()};
-    TableTuple tuple = storage.tuple();
-    for (int i = 0; i < names.size(); ++i) {
-        Tools::setTupleValues(&tuple, names[i], empIds[i], managerIds[i]);
-        employeesTable->insertTuple(tuple);
-    }
-}
-
-}
-
 TEST_F(CommonTableExpressionTest, Basic) {
     UniqueEngine engine = UniqueEngineBuilder().build();
     bool success = engine->loadCatalog(0, catalogPayload);
     ASSERT_TRUE(success);
 
     Table* employeesTable = engine->getTableByName("EMPLOYEES");
-    loadEmployees(employeesTable);
+    std::vector<std::tuple<std::string, int, boost::optional<int>>> persistentTuples{
+        {"King",      100, boost::none},
+        {"Cambrault", 148, 100},
+        {"Bates",     172, 148},
+        {"Bloom",     169, 148},
+        {"Fox",       170, 148},
+        {"Kumar",     173, 148},
+        {"Ozer",      168, 148},
+        {"Smith",     171, 148},
+        {"De Haan",   102, 100},
+        {"Hunold",    103, 102},
+        {"Austin",    105, 103},
+        {"Ernst",     104, 103},
+        {"Lorentz",   107, 103},
+        {"Pataballa", 106, 103},
+        {"Errazuriz", 147, 100},
+        {"Ande",      166, 147},
+        {"Banda",     167, 147}
+    };
 
+    StandAloneTupleStorage storage{employeesTable->schema()};
+    TableTuple tupleToInsert = storage.tuple();
+    BOOST_FOREACH(auto initValues, persistentTuples) {
+        Tools::initTuple(&tupleToInsert, initValues);
+        employeesTable->insertTuple(tupleToInsert);
+    }
+
+    // Create the executor vector from the hand-coded JSON
+    // TODO: check that the plan looks like we expect
     auto ev = ExecutorVector::fromJsonPlan(engine.get(), jsonPlan, 0);
     ASSERT_NE(NULL, ev.get());
 
+    // Execute the fragment and verify the result.
     UniqueTempTableResult result = engine->executePlanFragment(ev.get(), NULL);
     ASSERT_NE(NULL, result.get());
 
-    std::cout << "\n\n\nRESULT:\n" << result->debug() << std::endl;
+    std::vector<std::tuple<std::string, int, boost::optional<int>, int64_t, std::string>> tuples{
+        {"King",      100, boost::none, 1, "King"},
+        {"Cambrault", 148, 100,         2, "King/Cambrault"},
+        {"De Haan",   102, 100,         2, "King/De Haan"},
+        {"Errazuriz", 147, 100,         2, "King/Errazuriz"},
+        {"Bates",     172, 148,         3, "King/Cambrault/Bates"},
+        {"Bloom",     169, 148,         3, "King/Cambrault/Bloom"},
+        {"Fox",       170, 148,         3, "King/Cambrault/Fox"},
+        {"Kumar",     173, 148,         3, "King/Cambrault/Kumar"},
+        {"Ozer",      168, 148,         3, "King/Cambrault/Ozer"},
+        {"Smith",     171, 148,         3, "King/Cambrault/Smith"},
+        {"Hunold",    103, 102,         3, "King/De Haan/Hunold"},
+        {"Ande",      166, 147,         3, "King/Errazuriz/Ande"},
+        {"Banda",     167, 147,         3, "King/Errazuriz/Banda"},
+        {"Austin",    105, 103,         4, "King/De Haan/Hunold/Austin"},
+        {"Ernst",     104, 103,         4, "King/De Haan/Hunold/Ernst"},
+        {"Lorentz",   107, 103,         4, "King/De Haan/Hunold/Lorentz"},
+        {"Pataballa", 106, 103,         4, "King/De Haan/Hunold/Pataballa"}
+    };
+
+    int i = 0;
+    TableTuple iterTuple{result->schema()};
+    TableIterator iter = result->iterator();
+    while (iter.next(iterTuple)) {
+        bool success = assertTuplesEqual(tuples[i], &iterTuple);
+        if (! success) {
+            break;
+        }
+
+        ++i;
+    }
+
+    // Try executing again, to make sure we clean up intermediate temp tables.
+    ExecutorContext::getExecutorContext()->cleanupAllExecutors();
+    result = engine->executePlanFragment(ev.get(), NULL);
+    ASSERT_NE(NULL, result.get());
+
+    i = 0;
+    iter = result->iterator();
+    while (iter.next(iterTuple)) {
+        bool success = assertTuplesEqual(tuples[i], &iterTuple);
+        if (! success) {
+            break;
+        }
+
+        ++i;
+    }
 }
 
 int main() {
